@@ -1,0 +1,682 @@
+---
+title: "The role of data sample uncertainty in delineations of Core Based Statistical Areas and Rural Urban Commuting Areas"
+author:
+  - name: Christopher S. Fowler
+    affiliations:
+      - name: Department of Geography, Penn State University
+  - name: John Cromartie
+    affiliations:
+      - name: Economic Research Service, U.S. Department of Agriculture
+format:
+  docx:
+    cite-style: authoryear
+editor: visual
+bibliography: USDAMetroUncertainty.bib
+link-citations: true
+---
+
+```{r setup,include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+#Libraries
+#library(remotes) #first time only
+#install_github("davidsjoberg/ggsankey")
+#install_github("rstudio/gt") #only to get recent version of gt with fix for Word table rendering. Should be in main CRAN package shortly
+library(tigris)
+library(dplyr)
+library(scales)
+library(ggsankey)
+library(spdep)
+library(reshape2)
+library(gridExtra)
+library(gtable)
+library(gt)
+library(gtsummary) #needed for render to word
+
+#Data
+source("./DataPrep.R") #Runs data prep script. If any of the files aren't where they should be it creates them.
+
+#Custom Functions
+source("./AssociatedFunctions.R")
+
+full_analysis_run=FALSE #Running the full set of simulations is time consuming. Setting this variable to FALSE will only run analyses for which results are not available in the output directory associated with the project.
+```
+
+## Abstract
+
+Federal standards that assign counties to Core Based Statistical Areas (CBSAs) and designate tracts with a Rural Urban Commuting Area (RUCA) code rely on journey to work data from the American Community Survey (ACS). Because the ACS is based on a relatively small sample of the population commuting flows are represented as point estimates, frequently with high margins of error. In this paper we examine the impact of uncertainty in commuting flows on these two critical designations. We find that, for the vast majority of counties (85%) and tracts (87%), the official designation remains consistent and that, in over 1,000 replications of the data, 98% of county assignments and 97% of tract assignments were consistent with the official delineations. While these results are reassuring, a small number of counties and tracts do experience assignments that are different from the official delineation at very high rates. We also test the official delineations against an alternative data source, the Longitudinal Employer-Household Dynamics Survey's Origin-Destination Employment Statistics (LEHD-LODES). We find the LODES data result in designations that are largely consistent with those from the ACS but we lack a clear way to choose between the data products in places where they differ. Overall, our findings suggest that the current delineation method for assigning counties to CBSAs and tracts to RUCA codes is sufficiently robust to uncertainty to continue going forward. Nevertheless, the presence of significant uncertainty for some observations suggests the need for continued consideration of uncertainty in the context of future data releases.
+
+## Introduction
+
+Every year billions of dollars are allocated through programs where eligibility is based on a community's status as rural or urban. How these funds are allocated depends crucially on federal standards that define geographic areas in particular ways. Key among the many standards are designations that assign counties to Core Based Statistical Areas (CBSA), the blanket term covering both metropolitan and micropolitan regions. Another important designation is the Rural Urban Commuting Area codes (RUCA codes) maintained by the U.S. Department of Agriculture's Economic Research Service (USDA ERS). Crucially, both the CBSA and RUCA designations rely on survey data produced by the Census Bureau that documents county to county or tract to tract commuting flows.
+
+Both the CBSA and RUCA designations rely on commuting flow data from the American Community Survey (ACS) as a mechanism for indicating social and economic connection between geographic areas. Drawn from a rolling 2% sample of the population[^1], the five-year ACS commuting data is delivered with both a point estimate and a margin of error (MOE) covering the 90% confidence interval around the provided estimate. In counties where the population is either small or flows are divided among a large number of origins and destinations these MOEs can be quite high (the most extreme case in the 2006-2010 county data links El Paso County, Colorado with Otero County, New Mexico with a single commuter and a margin of error of 127 or 12,700%). In tracts, where the population counts are typically smaller, 68% of flows have a MOE that is larger than the flow itself. Despite the significance of the uncertainty in the commuting flow data, uncertainty does not enter into the delineation process for CBSA's or RUCA codes. Additionally, the uncertainty associated with the underlying data is lost in the delineation and, in the case of CBSA's, the end user is never made aware that the uncertainty existed.
+
+[^1]: Our analysis relies on the five-year combined sample release, the only release for smaller geographic areas like tracts. In theory, this five-year data would represent a 10% sample of the population in any given area, though this is not precisely correct because of entrance and exit of respondents, oversampling in some areas and for some populations, and other efforts designed to make the sample representative of the population.
+
+Careful consideration of uncertainty in data is experiencing something of a renaissance as new data and new methods work to distinguish statistical or methodological uncertainty from data uncertainty [see @franklin2022 for a thorough review of this issue within human geography]. Nevertheless, many practitioners who work with Census data do not have a clear sense of how to deal with uncertainty such as that presented by the ACS [@jurjevich2018]. The default practice (and Jurjevich provides supporting evidence for this among planners in particular) is to ignore provided margin of error information. Lacking information on uncertainty allows delineations to appear definitive with no means to ascertain their reliability. Inclusion of uncertainty analysis is warranted in the face of research documenting that counties and tracts vary significantly in the degree to which they represent a good fit for different measures [@plane1981; @fowler2019; @fowler2020; @cromartie1996].
+
+The purpose of this paper is to examine the impact of uncertainty in commuting flows on the delineations for CBSA's and RUCA codes. We find that only a small share of counties and tracts are impacted by uncertainty in terms of what CBSA or RUCA designation they receive (about 15% of counties and 13% of tracts). However, for the units where alternative assignment is possible, inconsistent assignments can happen quite frequently when commuting flows are allowed to vary within their provided margin of error; as much as 54% of the time for affected counties and as much as 100% of the time for affected tracts. The places at greatest risk of inconsistent assignment are not geographically concentrated and they are broadly distributed across urban and rural communities. Affected places are not the smallest or largest places in terms of population, but places in the middle of the distribution; counties between 10,000 and 100,000 persons and tracts of all sizes (within the relatively narrow population targets that the Census uses for tracts).
+
+Additionally with this paper we consider the impact of employing an alternative to the ACS commuting data, the Longitudinal Employer-Household Dynamics Survey's Origin-Destination Employment Statistics (LEHD-LODES). LODES data are the primary competitor to the ACS commuting data and have national coverage, annual updates, and origins in a broad sample of the commuting population that all make LODES an attractive alternative. While LODES does not have an MOE, it is a synthetic data set whose precise deviations from the 'true' data are not disclosed to protect individual privacy. As a result it is hard to know whether any differences that emerge from using LODES are the result of a different data source or a different methodology. Our analysis finds that using LODES data produce a somewhat different set of delineations that differ from the official point-estimate delineations and from the alternatives incorporating uncertainty. One positive finding of our analysis is that the differences in delineations arrived at with ACS and LODES data are not biased in one direction or the other; that is LODES is not more likely to designate places as more urban or less urban. This suggests that the differences between the two data sets are a function of their joint uncertainty, not a specific structural difference.
+
+Finally, we attempt to provide further value to the research community by providing scripts that replicate both the official delineations and our method for examining uncertainty as well as output files that associate the official delineations with our uncertainty measure for use in uncertainty-sensitive research using these geographic areas. Replication of the extant delineations turned out to be a non-trivial undertaking even with support from agency experts. As the standards come up for review and revision in 2023 based on the 2020 census we hope these delineation scripts can support careful examination of proposed modifications.
+
+In the remainder of this paper we first situate our work within the broader literature on uncertainty. Next we describe the data and methods used to replicate the federal standards and then replicate them in the context of uncertain commuting flows. Subsequently we present the results of our analysis of 1,000 alternative flow matrices built from the point estimates and MOE's provided by the ACS and discuss the variation we observe in delineations built from these matrices in terms of geography and observation type. Ultimately we argue for the inclusion of this type of uncertainty analysis in the next generation of CBSA and RUCA designations based on the 2020 census.
+
+## Literature Review
+
+Uncertainty enters any form of analysis in myriad ways from the selection of subjects and the categories used to describe them to the structure of analytic techniques and the norms for reporting results [@franklin2022]. Geographic data have additional mechanisms for introducing uncertainty based on practices of measurement and reporting [@robertson2018] but within the broad realm of geographic data, that which attempts to capture mobility has probably the greatest uncertainty of all [@franklin2006; @folch2016; @kwan2012]. For the purposes of this discussion we will focus on three forms of uncertainty. First, we look at uncertainty in the data and its basis in a relatively small sample of individuals. Next we look at uncertainty in the meanings of the delineations we consider, particularly the significant debates around defining rural and urban or aggregating sub-units into 'functional regions' meant to capture shared socio-economic practices. Finally, we look at methods of delineation that address uncertainty in how specific places are designated given a set of possible categories. This last framing of uncertainty is the one that we address most directly in this paper, but it is contingent on the other two, so we lay them out first.
+
+There is a significant literature that addresses questions of uncertainty in the use of data from the ACS [@folch2016; @spielman2014; @spielman2015; @sun2010; @jung2019]. Much of this work is designed to help researchers interpret and work with the MOE's provided in the survey data and to point out the variation in the quality of the data as represented by these MOE's. @jurjevich2018 has demonstrated that most planners who work with ACS data simply ignore the information on uncertainty that comes with the data. Anecdotally, the academic literature seems to do the same except in cases, like those listed above, where the authors are specifically addressing the topic of uncertainty. One theme that emerges from this work is that the quality of estimates from the ACS varies in non-random ways with lower quality estimates in urban cores, in poorer areas, and in the Southern United States [@folch2016]. Non-random data quality is a significant problem, especially for national-level characterization (such as the CBSA and RUCA delineations covered here). Particularly concerning is that the uncertainty conveyed in the original data does not pass through to these subsequent delineations. One promising thread to emerge from this literature is that the directed aggregation of geographic subunits through regionalization can reduce the impact of uncertainty in larger units [@spielman2015]. This technique holds promise for future iterations of the CBSA and RUCA delineation methodologies, which already utilize regionalization but without the focus on reducing uncertainty.
+
+Another aspect of uncertainty that is relevant here has to do with uncertainty in the meanings we assign in the process of delineation. There is a significant debate about what constitutes rural and/or urban, with interest in thinking about the 'continuum' of contexts that exist within this dichotomy [@isserman2005; @baer1997; @fowler2016; @ratcliffe2016; @schroeder2021; @cromartie2008]. The problem of distinguishing between rural and urban places for the purposes of federal funding has a long history and comes to a head every decade or so when new Census data triggers new delineations [@morrill1999; @fitzsimmons2004; @porter2009]. While these various interpretations differ on the specifics, there is generally agreement on roles for population density and connectivity as key measures of where places fall on this continuum. In a significant critique of extant definitions of rural and urban Andrew Isserman drew attention to the way in which major federal agencies precisely identified 'urban' and 'metropolitan' but left 'rural' and 'nonmetropolitan' poorly defined as remainder categories [@isserman2005]. Isserman argued that problems with delineations (by the Census Bureau and the Office of Management and Budget) were significant because they could lead to miss-allocation of federal funds among other issues [@isserman2005]. In a similar strain of argument @porter2009 argued for caution in assumptions about the internal homogeneity of places designated as nonmetropolitan or metropolitan. Their work found significant heterogeneity not only in counties on the fringes of metropolitan areas, but also in counties that were unequivocally metropolitan. More recently, Wright et al. have documented how updates to the OMB metropolitan delineations have shaped perceptions of changing diversity and segregation by continually adding peripheral counties to metropolitan areas that tend to be whiter than the counties included in previous delineations [@wright2022].
+
+Further complicating this debate is the fact that what is commonly understood as rural or urban changes over time as there is no fixed understanding of how many people or how densely settled they must be to constitute an urban context. In general, as population and city sizes increase, what constitutes a city also changes in the public view. Experts in charge of determining delineation methods are thus placed in a quandary between maintaining consistent definitions over time and updating definitions to reflect changing meanings [@ratcliffe2016]. Even small changes in these definitions will generate plenty of public debate [@vowell2021]. Finally, on top of uncertainty of meaning and changing meanings, there is an issue of how well any given observation will fit some established meaning. Plane documented this phenomenon with respect to metropolitan areas over forty years ago, noting how cross-metro commuting patterns in New England created a polycentric landscape that was quite different from what was generally observed elsewhere [@plane1981]. Fowler and Jensen noted similar phenomena with regards to a broad range of labor market delineations in the U.S. [@fowler2020]. All this uncertainty around the definition and fit for delineations suggests that delineations should include resources to document the implications of definitonal choices as well as metrics for evaluating the fit of individual observations.
+
+Building uncertainty into methods of delineation is one area where significant progress has been made in recent years. Recent efforts employ a range of techniques for dealing with the inevitable 'fuzziness' of data and meaning [@foote2021; @fowler2020; @halas2019; @kropp2016; @wei2021; @tong2014; @dashnelson2016]. 'Functional regions' are typically understood as geographic areas with strong internal connections and weak connections with other regions [@halas2018]. What constitutes a connection can vary considerably, but frequently includes commuting patterns, phone calls, correlation in wages, and housing moves [@karlsson2006; @fowler2020]. Of these, commuting patterns are by far the most widely used, at least in part because of data availability. There is a long history of delineating functional regions with commuting data [for a partial history see @coombes2014]. Numerous proposals have emerged that rely on different methodological tools to define functional regions in ways that ostensibly overcome limitations of extant delineations [@fowler2016; @kropp2016; @wei2021; @tong2014; @dashnelson2016]. All of these come up against a complex reality of human spatial organization that means no delineation will be perfect and every delineation will include geographic variations in quality [@plane1981; @fowler2020]. Whereas earlier contributions in this literature tended to focus on variations in the quality of delineations [e.g. @plane1981], later contributions tend to conceive of functional regions in terms of fuzzy membership that expressly deal with uncertainty of membership [@kropp2016; @florez-revuelta2008; @halas2019]. The advent of new techniques for delineation comes with both challenges and opportunities. The new techniques leverage sophisticated tools for identifying relationships in data, but they tend to obscure the decision-making processes that underlie a given delineation. With additional complexity it becomes hard to distinguish quality since observations that fit well simply confirm our expectations and outliers could either reflect relationships that previously went undetected or else failures of the delineation mechanism.
+
+The discussion above leads us to address uncertainty in our data as a key part of the delineation process, to incorporate that uncertainty and degree of 'fit' into any final delineation product, and to prefer simple methodologies for delineation over more complex ones so that we can better understand the mechanics that change our delineations over time. To the first point, we address uncertainty in our data by testing the consistency of our delineations using the MOE provided with the ACS data products. To the second point, we follow @fowler2020 in incorporating uncertainty into our delineation by providing a fit measure for observations within our delineations. To the third point, we argue for a retention of the 'simple' methodologies used to delineate urban and rural places over recent decades even as more complicated methods relying on machine learning and other algorithms improve and gain wide acceptance. While arguing for the retention of comparatively simple methodologies, we provide the tools for replicating those methodologies with explicit recognition of the size and connectivity thresholds that act as key methodological choices within the delineation so that users can adjust those thresholds to reflect different understandings of connectivity, urban density, and size thresholds for defining classes of urban agglomeration. All of this work has a very applied purpose. There needs to be an ongoing discussion of how federal standards for delineating counties and tracts within these standards can be updated. We hope that the information we provide here and the analytic tools that accompany our work, available at \<https://github.com/csfowler/uncertainCBSAandRUCA\> can support careful implementation of the next generation of these delineations.
+
+## Data
+
+The data for this analysis are chosen to conform to that used in the CBSA and RUCA delineations associated with the 2010 decennial Census.[^2] This means using the journey to work flow data from the 2006 to 2010 ACS five year summary data [@u.s.censusbureau2010]. We modify these data to remove destinations abroad and outlying territories. We retain data for 3,221 counties or county equivalents (counties for short) covering all fifty states and Puerto Rico. We match this to Core-Based Statistical Area delineations from 2013 [@u.s.censusbureau2013].[^3] We also employ a county to urban area crosswalk [@u.s.censusbureau2010b] that provides the underlying criteria for designating counties as "central." These underlying data are crucial to an accurate replication of the OMB delineation because several counties have their designation changed in the delineation process from 'central' to 'outlying' so that the final status in the Census designation file is not reliable for replication. Finally, we use the county adjacency file produced by the Census to identify county neighbors, another key criterion for inclusion in a given CBSA [@u.s.censusbureau2018]. For the purposes of conducting spatial overlays and visualizing our results spatially we access 2010 era county boundaries via the tidycensus package [@walker2022].
+
+[^2]: RUCA's and CBSA's for 2020 had not been released at the time this article was published. A mid-decade delineation of CBSA's was available based on commuting flows from the 2011-2015 ACS. However, we chose the original delineation conducted after the 2010 census (with 2005-2009 ACS data). This is because urban areas, a key input to CBSA's, are only updated every ten years meaning that the mid-decade delineations used new commuting flows overlaid on the old urban area definitions creating unknown inconsistencies.
+
+[^3]: More recent, mid-decade, delineations of CBSA's do exist, but they rely on updated population estimates but 2010 delineations of urbanized areas. The static nature of the urbanized areas causes the determination of metropolitan and micropolitan status to be slightly out of line with the intention of the delineation, so we prefer the 2013 era delineations where the data are all in sync with one another.
+
+For tract to tract commuting flows we use a special tabulation of this information made available by the Federal Highway Administration through the Census Transportation Planning Products (CTPP) program [@u.s.d.t.federalhighwayadministration2013]. These are drawn from ACS surveys over a 5 year period and are sample based estimates with very high published margins of error. As with the county to county flows we retain information from all fifty states and Puerto Rico. To ascertain the population in tracts that is in urban areas, urban clusters, or neither we employ tract level data from the National Historic Geographic Information, IPUMS system [@manson2022]. We obtained the spatial information on urban agglomerations and water-clipped tract boundaries for the purpose of conducting overlays from the same source. For comparison of our results with the existing delineation we utilize both the published RUCA codes from the Economic Research Service (ERS) and the unpublished methodology provided by ERS staff which includes interim data steps that permit us to identify the basis for differences we observe.
+
+As a further check on our analysis we use tract to tract commuting flows provided as part of the Longitudinal Employer-Household Dynamics, the LEHD Origin-Destinations Employment Statistics [LODES @u.s.censusbureau2010a]. These are partially synthetic data built from administrative records provided by the Bureau of Labor Statistics (BLS) and the Office of Personnel Management (OPM) covering a broad range of employment in the U.S. The data are not sample based like the ACS, but are partially synthetic to protect privacy. These data have the advantage of being built from a much larger and more complete set of information (primarily unemployment insurance filings) but they differ from the 'real' data in ways that are, by definition, not knowable. The use of LODES data serves an additional purpose. LODES is frequently proposed as an improved data source for work on commuting, but the impact of using its partially synthetic data is not fully tested. While we cannot specifically know whether the ACS sample or the synthetic LODES data are more correct, it is helpful to at least characterize their differences. One important issue we face is that the 2010 LODES data that we employ appears to be missing roughly 1,000 tracts spread across the U.S. The tracts come from a wide range of states, and capture areas that are both urban and rural. A better understanding of where, why, and when tracts are missing will be necessary to fully assess the suitability of the LODES data for future use. For now we offer a comparison with the available data for the most comparable year.
+
+## Method
+
+A key contribution of this paper is to programmatically replicate and validate the official methodologies for delineating metropolitan areas and RUCA codes. We base our methodology for delineating metropolitan/micropolitan/nonmetropolitan on the published methodology in the Federal Register [@officeofmanagementandbudget2010]. Our methodology for delineating RUCA codes is based on the published description of these codes [@u.s.d.a.economicresearchservice2023] as well as the participation of the delineation's author at ERS. In each case we first develop a function that takes population, urbanization, and commuting flow data as inputs and assigns counties and tracts according to the published methodology.
+
+A contribution of this paper is that we provide detailed scripts for downloading the appropriate data as well as functions that conduct the precise steps necessary to replicate delineations given data from an arbitrary year. The publication of this code anticipates the need to apply the same methodology to new data from the 2020 Census. As far as we know, neither the CBSA nor RUCA delineation methodologies have ever been made publicly available in a way that permits replication across varied data sets and assumptions. The code is available at https://github.com/csfowler/uncertainCBSAandRUCA.
+
+Subsequent to validating that our method replicates the official delineations, we apply the same delineation functions just described to alternative flow matrices generated based on random draws from the point estimates and MOE's provided with the ACS data. For every origin and destination pair in the ACS commuting data we first generate a standard deviation by dividing the MOE by 1.645 (the procedure recommended by the Census). Next, we randomly sample 1,000 values from the distribution centered on the point estimate and the standard deviation. This results in 1,000 different versions of the complete flow matrix. We use each of these flow matrices as an input for the validated delineation methodologies and produce 1,000 alternative delineations. We extend our comparison by also using the LODES flow matrix to produce one additional delineation.
+
+Our analysis is designed to concisely characterize uncertainty in federal delineations. We employ a simple measure of 'consistency' applied to individual counties and tracts that is simply the percentage of our 1,000 alternative delineations where the assigned value matched the official designation. For example, a county that was assigned to its official CBSA in 600 of the 1,000 flow matrices would receive a consistency score of 60%. Divergence from the assigned delineation could happen when a county was assigned to a different CBSA or not assigned to any CBSA, or when a tract received a different RUCA designation. One notable limitation of this very simple metric is that, while we do consider counties that are assigned to the same category but a different CBSA as different we do not consider tracts that retain the same RUCA code, but are attached to a different urban area as having changed. Another limitation of our measure is that we do not offer much nuance in terms of what constitutes a failure to match. A tract that goes from a RUCA score of 1 (core metropolitan) to 2 (commuting to core metropolitan) is treated identically if it gets assigned a value of RUCA 10 (rural). Alternative assignments tend to mark relatively small shifts, so we do not lose much information with this decision, but detailed examination of changes is probably warranted as further exploration of the implication of threshold changes and new data continues.
+
+Our method for stochastically generating alternative flow matrices in the ACS is not ideal since the random draws we enact do not account for correlations among flows. In constructing the point estimates and MOEs for the ACS the Census brings housing unit and population counts in line with other published data by assigning person and housing weights to individual survey responses. Each response is assigned an integer weight so that the sum of all weights for persons in a block group aligns with the total population for that block group in the Census population estimates program. The weight given to each specific survey is further refined to bring counts for specific sub-populations in line with population estimates as well. Since there is no objectively correct weight or combination of weights that will allow the sample to completely replicate the true population, the Census employs a procedure called successive differences replication [SDR, @fay1995; cited in @spielman2015 p. 1006] to generate eighty distinct 'replicate weights' that offer different viable combinations of weights that all add up to the population estimate totals. Point estimates and MOEs are subsequently generated from these eighty replicate weights tables. The key advantage of these replicate weights is that as weights on one individual go up, weights on another necessarily go down. For our purposes this means that, in comparing replicate tables, increased flows between an origin and a destination would be balanced by decreased flows between that origin and another destination. In contrast, the random sampling strategy we employ treats every origin-destination pair as independent, so increases in one flow can accompany increases in another or vice versa. Replicate weights are available for many variables in the ACS, but not for commuting flows. This means that in our analysis every alternative estimate for flows from a given origin tract or county that we generate is sampled independently. This likely increases the measured uncertainty for some edge cases (and explains the existence of tracts that are always assigned a different RUCA code than the one in the official delineation). With these exceptions aside, independent draws would generally tend to reduce our measure of uncertainty as increases in one flow can be matched by increases in another flow increasing the likelihood that their relative importance will remain in place. One concrete recommendation we have from undertaking this analysis is that the replicate weights used to produce the point estimates and MOEs for the ACS commuting flows should, in the future, be retained and made publicly available as they are for so many other variables.
+
+### Replicating Metropolitan, Micropolitan, Nonmetropolitan and CBSA delineations
+
+Counties are assigned to one of three categories by OMB: metropolitan statistical area, micropolitan statistical area, or 'outside core based statistical areas.' These latter two designations are often combined and referred to as 'nonmetropolitan.' County status is assigned based on criteria listed in the Federal Register [@officeofmanagementandbudget2010]. The delineation depends first on the identification of urbanized areas/urban clusters of sufficient size (urbanized areas of at least 50,000 people for metropolitan status, urban clusters of at least 10,000 people for micropolitan status).[^4] A complicated process of identifying 'central' or 'outlying' status ensues based on the share of the resident population that works in adjacent counties. A threshold of 25% of the workforce--either commuting to a central county or commuting from a central county is used to signal connection between an outlying county and a given urban core. With a few extra rules about adjacency and combining central counties that are closely linked the county-level designations and CBSA codes emerge. Our analysis replicates the published methodology from the Federal Register to ensure that our function for assigning counties to a particular status is accurate [@officeofmanagementandbudget2010]. We construct our function so that the thresholds for urbanized areas (50,000), urban clusters (10,000), and commuting connection (25%) can all be adjusted by the user for maximum flexibility anticipating that these thresholds may be up for debate as future delineation standards are revised.[^5] We successfully match the assignment of all 3,221 counties in our data to the correct metropolitan/micropolitan/nonmetropolitan designation and the correct CBSA.
+
+[^4]: The distinction between urbanized areas and urban clusters was based solely on population size (above and below 50,000 people) and the labels were dropped in 2020 in favor of the all-inclusive 'urban areas'[@u.s.censusbureau2022].
+
+[^5]: In revising the CBSA standards for 2020, OMB proposed raising the threshold for an urbanized area to qualify as a metropolitan statistical area to 100, 000 people. The proposal was ultimately rejected following a review of public comments [@officeofmanagementandbudget2021].
+
+```{r Table0 replicate CBSA delineation, include=FALSE}
+quiet(if(full_analysis_run==TRUE | !file.exists("./Output Data/CBSA_replication.Rdata")){
+  #Base result of process applied to OMB delineation
+  load("./Output Data/flows.Rdata")
+  load("./Output Data/nba.Rdata")
+  result_county_CBSA<-assign_county(data_ag=flows[,c("Cnty_Res","Cnty_Work","Flow","O_Pre_Merge_Central","O_Pre_Merge_ID","D_Pre_Merge_Central","D_Pre_Merge_ID")],nb=nba)
+  save(result_county_CBSA,file="./Output Data/CBSA_replication.Rdata")
+}else(load("./Output Data/CBSA_replication.Rdata",verbose=FALSE)))
+## Generate table 1: successful matching of counties to federal definition
+table0<-data.frame(Unmatched=length(result_county_CBSA[result_county_CBSA$Consistent==FALSE,1]),
+                   Matched= length(result_county_CBSA[result_county_CBSA$Consistent==TRUE,1]))
+table0%>%
+  gt()%>%
+  tab_header(
+    title = "Table 0: CBSA and Metropolitan/Micropolitan/Non-metropolitan Code Reconstruction"
+  )%>%
+  table_theme()%>%
+  tab_options(
+    table.width = pct(33)
+  ) -> table0
+#table1 #not shown since it only confirms replication worked
+rm(table0)
+```
+
+Having established the accuracy of our function for replicating the official OMB definitions, we subsequently apply the replicating method to all one-thousand alternative flow matrices and the LODES flow matrix. For each county in each delineation we record whether the assigned CBSA code (or nonmetropolitan status) is consistent with the official delineation. We generate our measure of consistency and use that measure in the visualizations that follow.
+
+```{r CBSA_Simulation,echo=FALSE, include=FALSE}
+quiet(if(full_analysis_run==TRUE | !file.exists("./Output Data/sim_result.Rdata")){
+
+#Having replicated the assignment based on the original flow values we now test this process with flow values drawn from the provided distribution.
+
+#Simulate flows
+if(!exists("flows")){
+  load("./Output Data/flows.Rdata")
+}
+if(!exists("nba")){
+  load("./Output Data/nba.Rdata")
+}
+if(!exists("result_county_CBSA")){
+  load("./Output Data/CBSA_replication.Rdata")
+}  
+hold_flows<-flows
+
+totSteps=1000 #1000 simulations
+result_county_CBSA$AssignedType<-"Nonmetro"
+result_county_CBSA[(!is.na(result_county_CBSA$CBSAPOP) &
+                    result_county_CBSA$CBSAPOP>=10000) &
+                    result_county_CBSA$CBSAPOP<50000,"AssignedType"]<-"Micropolitan"
+result_county_CBSA[(!is.na(result_county_CBSA$CBSAPOP) &
+                    result_county_CBSA$CBSAPOP>=50000),"AssignedType"]<-"Metropolitan"
+sim_result<-data.frame(Cnty_Res=result_county_CBSA$Cnty_Res,Assigned=result_county_CBSA$Res.CBSA,MetroMicro=result_county_CBSA$AssignedType)
+
+for(i in 1:totSteps){
+  flows<-hold_flows
+  flows$Flow<-apply(flows,MARGIN = 1,FUN=function(x) rnorm2(as.numeric(x["Flow"]),as.numeric(x["Sd"]))) #replace point estimate flow with sampled flow
+  result2<-assign_county(data_ag=flows[,c("Cnty_Res","Cnty_Work","Flow","O_Pre_Merge_Central","O_Pre_Merge_ID","D_Pre_Merge_Central","D_Pre_Merge_ID")],nb=nba) #re-run county assignment function with new flows
+  #Now save assignment
+  colnum<-length(sim_result[1,])
+  print(paste0("Run ",colnum-1," Consistent = ",sum(result2$Consistent))) #document run #, this is a long process
+  sim_result[,colnum+1]<-result2$New.CBSA
+  colnames(sim_result)[colnum+1]<-paste0("Run_",colnum-1)
+}
+save(sim_result,file="./Output Data/sim_result.Rdata")
+}else{load("./Output Data/sim_result.Rdata",verbose = FALSE)})
+```
+
+### Replicating RUCA Codes
+
+RUCA codes are meant to mirror the terminology of the OMB metropolitan delineation but at a finer geographic scale. The methodology allocates census tracts to one of ten primary categories based on the degree to which they are themselves urban and the degree to which they are connected to urban places via commuting patterns. The numeric designations 1, 4, and 7 indicate that a tract is part of the urban core of a metropolitan, micropolitan, or small town urban area/cluster respectively. Codes 2, 5, and 8 indicate tracts with high (\>30%) levels of commuting to a core (2 commutes to 1, 5 commutes to 4, etc...), while codes 3, 6, and 9 indicate tracts with low (10%-30%) levels of commuting to a core. Code 10 designates rural areas dominated either by internal flows or commuting to other rural areas. The published RUCA codes also contain a secondary code that establishes the type of connection indicated by the second largest flow for a tract. These secondary codes are not replicated here, but because they are, by definition, smaller than the primary flows we would expect them to vary with somewhat higher frequency than the primary codes.
+
+Because the RUCA codes rely on the same population density-based delineation of urbanized areas and urban clusters and use identical thresholds to assign metropolitan (50,000 people) and micropolitan (10,000 people) status to urban cores the two delineations are quite similar. The finer scale of the RUCA delineation is useful for understanding spatial variation within counties, a crucial concern given the heterogeneity of county sizes [@curtis2012].
+
+Our approach to analyzing the RUCA codes is quite similar to that used for the metropolitan/CBSA delineation. We begin by testing our ability to replicate the official assignment and then move on to apply our replication script to one-thousand alternative flow matrices. Our ability to exactly replicate the official RUCA codes is complicated by some small elements of randomization in the original delineation.
+
+The most significant difference occurs in the assignment of a tract to an urbanized area or urban cluster when the tract overlaps parts of more than one of these areas. Specifically, the original methodology incorporated a census table listing tract population in an urbanized area, in an urban cluster, or not in either. The intended use of this table is to assign the tract to the correct agglomeration type based on which type contains the larger population. When there is one UA and one UC there is no issue and the one with the larger portion of the tract population in it is assigned. The problem occurs if the tract overlaps more than one UA or more than one UC. In that case the census table does not tell us how the population is allocated between the two areas of the same type. Faced with this uncertainty the original methodology assigned a tract randomly to one of the overlapping areas. Our method brings in additional information on the land area of overlap and chooses the UA or UC with the largest overlap. This results in several hundred differences between our delineation and the original.
+
+Randomness emerges again in choosing which commuting flow to treat as the major flow when two flows are tied in magnitude. The original method chose randomly. Our method first tries to choose a flow that is internal to the urban area (UA or UC). If an internal flow is not one of the tied flows our method chooses the flow that connects the observation to a larger urban type (metropolitan \> micropolitan \> small town). Finally, if the tied flows are external and to urban types of the same category, we choose randomly. In total, the random choice is only invoked thirteen times in 74,002 tracts.
+
+Because our method reduces the randomness in selecting a RUCA designation for each tract in each of the cases just described we use our own delineation as the base case for comparison with the simulated flows rather than using the official delineation. Some differences emerge from the stochasticity in the assignment process, but these represent a very small portion of the overall comparison.
+
+One other difference emerges between our replication and the official delineation. The RUCA methodology designates zero population tracts as category '99'. However, some zero population tracts are employment destinations. The original methodology ultimately assigns these tracts a RUCA code inconsistently. Specifically, zero population tracts show up with a mixture of '99' and other designations in cases where flows to the zero population tract represented the largest flow out of a populated tract. Our methodology enforces the intended '99' designation for these tracts creating one final source of difference between our delineation and the official delineation. Table 1 reports on the differences between our delineation and the official RUCA delineation.
+
+```{r, Table1 assign RUCA codes to tracts, fig.width=5,fig.height=5}
+#| tbl-cap: RUCA Code Reconstruction
+
+##Assign flows from tractsUA see how they compare with the actual ERS delineation
+quiet(if(full_analysis_run==TRUE | !file.exists("./Output Data/RUCA_result.Rdata")){
+  load("./Output Data/tractsUA.Rdata")
+  load("./Output Data/RUCA_Official.Rdata")
+  agg_tract<-aggregate(tractsUA$Flow,by=list(tractsUA$Res_MergeID,tractsUA$Wk_MergeID,tractsUA$Res_UAType,tractsUA$Wk_UAType),sum)
+  colnames(agg_tract)<-c("Res_MergeID","Wk_MergeID","Res_UAType","Wk_UAType","Flow")
+  RUresult<-data.frame(Res_MergeID=unique(agg_tract$Res_MergeID),RUCA=NA,Choice=NA,Smaller=NA,Random=NA,Problem=NA)
+  RUresult[,c("RUCA","Choice","Smaller","Random","Problem")]<-t(sapply(X = RUresult$Res_MergeID,assign_RUCA1))
+  tractsUA_RUCA<-merge(tractsUA,RUresult, by="Res_MergeID",all.x=TRUE)
+  tractsUA_RUCA<-unique(tractsUA_RUCA[,c("Res_GISJOIN","RUCA","Choice","Smaller","Random","Problem")])
+
+  RUCA_result<-merge(tractsUA_RUCA,RUCAOfficial,by="Res_GISJOIN",all=TRUE)
+  RUCA_result[RUCA_result$Pop==0,"RUCA"]<-99
+  RUCA_result$Matched<-ifelse(RUCA_result$RUCA-RUCA_result$RUCA1==0,1,0)
+  RUCA_result$Pop0<-0
+  RUCA_result[RUCA_result$Pop==0,"Pop0"]<-1
+  RUCA_result$TotalIssues<-rowSums(RUCA_result[,c("Choice","Smaller","Random","Pop0")])
+  save(RUCA_result,file="./Output Data/RUCA_result.Rdata")
+}else{load("./Output Data/RUCA_result.Rdata")})
+
+#Create table indicating differences between official delineation and my tabulation
+###########           Straightforward | Chose internal | Chose lower number | Chose Randomly | Zero Population
+# Matched: 
+# Unmatched: 
+#
+table1<-data.frame(Status=c("Chose UA with larger overlap","Chose Internal Flow","Chose Lower Number","Chose Randomly","Zero Population Tract"),Unmatched = rep(NA,5), Matched=rep(NA,5))
+table1[1,2:3]<-table(RUCA_result[RUCA_result$TotalIssues==0,"Matched"])
+table1[2,2:3]<-table(RUCA_result[,c("Matched","Choice")])[,2]
+table1[3,2:3]<-table(RUCA_result[,c("Matched","Smaller")])[,2]
+table1[4,2:3]<-table(RUCA_result[,c("Matched","Random")])[,2]
+table1[5,2:3]<-table(RUCA_result[,c("Matched","Pop0")])[,2]  
+table1$Phase<-"Code Assignment"
+table1[1,"Phase"]<-"Urban Area Assignment"
+
+table1%>%
+  gt(
+    groupname_col = "Phase"
+  ) %>%
+  grand_summary_rows(
+    columns = c("Unmatched","Matched"),
+    fns = list(Total = ~sum(.)),
+    decimals = 0,
+  )%>%
+  cols_label(
+    Status=md("")
+  )%>%
+  table_theme()->table1
+table1
+  
+rm(table1)
+```
+
+With a functioning replication script in place we use the one-thousand alternative flow matrices as inputs to the script and generate a table containing one-thousand alternative delineations.
+
+```{r RUCA_Simulation}
+if(full_analysis_run==TRUE | !file.exists("./Output Data/RUCA_sim_result.Rdata")){
+
+#Having replicated the assignment based on the original flow values we now test this process with flow values drawn from the provided distribution.
+if(!exists("tractsUA")){
+  load("./Output Data/tractsUA.Rdata")
+}
+#Simulate flows
+hold_flows<-tractsUA
+hold_flows$Sd<-hold_flows$MOE/1.645
+hold_flows[is.na(hold_flows$Sd),"Sd"]<-0
+totSteps=1000 #1000 simulations
+RUCA_sim_result<-data.frame(GISJOIN=RUCA_result$Res_GISJOIN,RUCA=RUCA_result$RUCA)
+for(i in 1:totSteps){
+    df<-hold_flows
+    df$Flow<-apply(df,MARGIN = 1,FUN=function(x) rnorm2(as.numeric(x["Flow"]),as.numeric(x["Sd"])))
+    agg_tract<-aggregate(df$Flow,by=list(df$Res_MergeID,df$Wk_MergeID,df$Res_UAType,df$Wk_UAType),sum)
+    colnames(agg_tract)<-c("Res_MergeID","Wk_MergeID","Res_UAType","Wk_UAType","Flow")
+    RUresult<-data.frame(Res_MergeID=unique(agg_tract$Res_MergeID),RUCA=NA,Choice=NA,Smaller=NA,Random=NA,Problem=NA)
+    RUresult[,c("RUCA","Choice","Smaller","Random","Problem")]<-t(sapply(X = RUresult$Res_MergeID,assign_RUCA1))
+    df_RUCA<-merge(df,RUresult, by="Res_MergeID",all.x=TRUE)
+    df_RUCA<-unique(df_RUCA[,c("Res_GISJOIN","RUCA")])
+    colnames(df_RUCA)<-c("GISJOIN",paste0("Run_",i))
+    RUCA_sim_result<-merge(RUCA_sim_result,df_RUCA)
+    consistent=sum(RUCA_sim_result$RUCA==RUCA_sim_result[,i+2])  
+    print(paste0("Run ",i," Consistent = ",consistent))
+}
+RUCA_sim_result[RUCA_sim_result$RUCA==99,]<-99 #change 0 population tracts to 99
+save(RUCA_sim_result,file="./Output Data/RUCA_sim_result.Rdata")
+}else{load("./Output Data/RUCA_sim_result.Rdata")}
+```
+
+### LEHD-LODES Data
+
+Given the relatively small sample size of the ACS commuting flow data, the LEHD LODES data are often suggested as an alternative source of commuting information that could be used to delineate CBSA's or RUCA codes. In the interest of exploring the utility of these data we apply our function for assigning counties to CBSA's and assigning tracts to RUCA's using the LODES data for 2010. We report the results of this matching process in our analysis below. As noted above, our comparison is complicated by 926 missing records for populated tracts.
+
+```{r LODES_Simulation}
+if(full_analysis_run==TRUE | !file.exists("./Output Data/LODES_CBSA_result.Rdata")){
+#Base result of process applied to OMB delineation
+LODES_result<-assign_county(data_ag=lodes_cty[,c("Cnty_Res","Cnty_Work","Flow","O_Pre_Merge_Central","O_Pre_Merge_ID","D_Pre_Merge_Central","D_Pre_Merge_ID")],nb=nba)
+save(LODES_result,file="./Output Data/LODES_CBSA_result.Rdata")
+}else{load("./Output Data/LODES_CBSA_result.Rdata",verbose=FALSE)}
+
+if(full_analysis_run==TRUE | !file.exists("./Output Data/LODES_RUCA_result.Rdata")){
+load("./Output Data/lodesUA.Rdata")
+load("./Output Data/RUCA_Official.Rdata")
+  agg_tract<-aggregate(lodesUA$Flow,by=list(lodesUA$Res_MergeID,lodesUA$Wk_MergeID,lodesUA$Res_UAType,lodesUA$Wk_UAType),sum)
+  colnames(agg_tract)<-c("Res_MergeID","Wk_MergeID","Res_UAType","Wk_UAType","Flow")
+  RUresult<-data.frame(Res_MergeID=unique(agg_tract$Res_MergeID),RUCA=NA,Choice=NA,Smaller=NA,Random=NA,Problem=NA)
+  RUresult[,c("RUCA","Choice","Smaller","Random","Problem")]<-t(sapply(X = RUresult$Res_MergeID,assign_RUCA1))
+  lodesUA_RUCA<-merge(lodesUA,RUresult, by="Res_MergeID",all.x=TRUE)
+  lodesUA_RUCA<-lodesUA_RUCA[,c("Res_GISJOIN","RUCA","Choice","Smaller","Random","Problem")]
+  lodesUA_RUCA<-lodesUA_RUCA[order(lodesUA_RUCA$Res_GISJOIN),]
+  lodesUA_RUCA[!duplicated(lodesUA_RUCA),]
+  LODES_RUCA_result<-merge(lodesUA_RUCA,RUCAOfficial,by="Res_GISJOIN",all=TRUE)
+  LODES_RUCA_result[LODES_RUCA_result$Pop==0,"RUCA"]<-99
+  LODES_RUCA_result$Matched<-ifelse(LODES_RUCA_result$RUCA-LODES_RUCA_result$RUCA1==0,1,0)
+  LODES_RUCA_result$Pop0<-0
+  LODES_RUCA_result[LODES_RUCA_result$Pop==0,"Pop0"]<-1
+  LODES_RUCA_result$TotalIssues<-rowSums(LODES_RUCA_result[,c("Choice","Smaller","Random","Pop0")])
+  save(LODES_RUCA_result,file="./Output Data/LODES_RUCA_result.Rdata")
+}else{load("./Output Data/LODES_RUCA_result.Rdata",verbose=FALSE)}
+#note: there are 1004 tracts inexplicably missing from the LODES data. Many of the tracts are in pretty large metro areas. I can find no explanation for why they would be missing, but I have gone back to the original download of the data to look for them and they simply aren't there. An example is tract 2701 in Pima (19) county Arizone (4) 04019002701. Has over 2000 people, but just absent.
+```
+
+## Analysis
+
+Our analysis of the alternative flow matrices focuses on the magnitude and characteristics of differences between the official delineations of metropolitan/CBSA and RUCA codes. In each case we measure the frequency of alternative assignments for particular spatial units and seek to describe the characteristics of the units where we do observe differences. In general, the results show a relatively small number of alternative assignments (relatively high levels of consistency), but some units do get assigned differently with high frequencies.
+
+### CBSA assignment consistency by type of county and by location
+
+Overall, the assignment to CBSA and metropolitan/micropolitan/nonmetropolitan status is quite consistent. Across all 3,221,000 assignments (1,000 flow matrices applied to 3,221 counties) Table 2 documents that over 98% of the time a county is assigned to the same status as in the official delineation. Within that high level of overall consistency, however, 15% of counties have a different assignment at least once and there are a small number of places for which assignment is highly uncertain.
+
+```{r, Table2 analyze county sim result, fig.width=5,fig.height=5}
+#| tbl-cap: County designation changes across 1,000 simulations
+#Determine degree to which CBSA and Metro/micro/non-metro were consistent with official delineation across 1000 alternative flow matrices
+#           |Consistent |New metro/micro |To Metro | To Micro | To Nonmetro
+# Metro
+# Micro
+# Nonmetro
+#
+#Simulation results
+assigned<-sim_result[,4:1003]
+#replicate initial assignment 1000 times
+original<-data.frame(rep.col(sim_result$Assigned,1000))
+#replicate initial class 1000 times
+MetMicNon<-matrix(rep.col(sim_result$MetroMicro,1000),ncol = 1000,byrow = FALSE)
+
+#Figuring out simulated assignment class
+lookup<-sim_result[,c("Assigned","MetroMicro")]
+lookup<-unique(lookup)
+convertClass<-function(x,lookup){
+  return(plyr::mapvalues(x,from=lookup$Assigned, to=lookup$MetroMicro,warn_missing = FALSE))
+}
+assignedClass<-apply(assigned,MARGIN = 2,FUN = function(x) convertClass(x,lookup))
+
+#Organize by original type, end type and whether consistent or not
+assignedC<-apply(assigned,MARGIN = 2,FUN=function(x) x==sim_result$Assigned) #Consistent
+consistent<-data.frame(FIPS=rep(sim_result$Cnty_Res,1000),Original=melt(MetMicNon,value.name = "Original")["Original"],New=melt(assignedClass,value.name = "New")["New"],Consistent=melt(assignedC,value.name ="Consistent")["Consistent"])
+consistResult<-table(consistent[,2:4])
+table2a<-rowSums(consistResult[1:3,1:3,2])
+table2b<-consistResult[1:3,1:3,1]
+table2<-data.frame(Consistent=table2a,Metropolitan=table2b[,"Metropolitan"],
+                   Micropolitan=table2b[,"Micropolitan"],Nonmetro = table2b[,"Nonmetro"])
+tot<-rowSums(table2)
+table2<-data.frame(Official=rownames(table2),round(table2/tot,4))
+table2%>%
+  gt(rowname_col = "Official") %>%
+  fmt_percent(
+    columns = c("Consistent","Metropolitan","Micropolitan","Nonmetro")
+  )%>%
+    tab_spanner(
+    label = "Simulation Outcome",
+    columns = c("Consistent","Metropolitan","Micropolitan","Nonmetro")
+  )%>%
+  table_theme()->table2
+table2
+rm(assigned,assignedClass,lookup,MetMicNon,original,tot,table2,table2a,table2b,consistResult)
+```
+
+We can see where this uncertainty occurs in Figure 1, a map showing the rate of inconsistent assignment for counties across the entire country. Inconsistency in a county's assignment does not occur with any spatial pattern[^6], though it is notable that some counties have inconsistent assignments at very high rates.
+
+[^6]: Moran's *I* test for clustering of similar results is .005, a value very close to the expected result of a random distribution.
+
+```{r, Figure1 County assignment error map, fig.width=6.5,fig.height=6.5}
+#| fig-cap: Percent of assignments that were inconsistent 
+#Map
+#Share of simulations that were Consistent
+assignedShare<-rowSums(assignedC)/1000
+
+consistent<-data.frame(FIPS=sim_result$Cnty_Res,Consistent=assignedShare)
+consistent$Inconsistent<-1-consistent$Consistent
+bks<-c(0,.0001,.1,.25,.5,1)
+consistent$PctDifferent<-cut(consistent$Inconsistent,breaks = bks,include.lowest = TRUE,labels = c("Never","Less than 10%","10% to 25%","25% to 50%","More than 50%"))
+load("./Output Data/county_map.Rdata")
+load("./Output Data/states.Rdata")
+load("./Output Data/weights.Rdata")
+counties10<-merge(counties,consistent,by="FIPS")
+
+#Conduct Moran's I
+#moran.mc(counties10$Consistent,listw = weights,zero.policy = TRUE,nsim=999)
+#Moran's of .0067592 p-value of .26 -> yes it is different, but not much
+
+counties10<-shift_geometry(counties10)
+
+ggplot() +
+  geom_sf(data=counties10,aes(fill = PctDifferent),color=NA) +
+  geom_sf(data=us_states, fill=NA, color='black',size=0.1)+
+  #ggtitle("Figure 1: Percent of assignments that were inconsistent") +
+  theme_void()+
+  scale_fill_brewer(name="",palette = "Blues" )+
+  guides(color="none")+theme(legend.position = "bottom")
+  
+rm(consistent,bks,counties)
+```
+
+Figure 2 breaks down patterns of inconsistent assignment by county population and by share of the population that is Hispanic and Non-Hispanic Black. Inconsistently assigned counties tend to have slightly smaller shares of Hispanic and Black populations than counties as a whole. Moreover, the population distribution shown in Figure 2 demonstrate that the inconsistently assigned counties are not the smallest or largest counties, but are also generally from the middle of the distribution; counties of between 10,000 and 80,000 persons. The largest county that has an inconsistent assignment is Hall County, Georgia at 180,000 people. The smallest is Loving County, Texas at 83 people which gets changed from nonmetropolitan to metropolitan in 49% of our alternative flow matrices. In all there are 182 counties that are consistent less than 90% of the time. A small, but significant minority, perhaps acceptable when viewed on a national scale, but certainly of real importance to the 3.27 million people living in those counties.
+
+```{r, Figure2 inconsistent assignment by county type, fig.width=6.5,fig.height=5}
+#| fig.cap: Distribution of consistent and inconsistent assignments
+fig2<-st_drop_geometry(counties10)
+fig2$Always<-ifelse(fig2$PctDifferent=="Never",1,0)
+fig2$Always<-factor(fig2$Always,levels=c(1,0),labels=c("Consistent","Sometimes Inconsistent"))
+fig2$PctBlack<-(fig2$NHBlack/fig2$Total)
+fig2$PctHispanic<-(fig2$Hispanic/fig2$Total)
+fig2$Pop<-fig2$Total
+fig2<-pivot_longer(data = fig2[,c("Always","Pop","PctBlack","PctHispanic")],
+                    !Always, names_to="Type",values_to = "Value")
+
+fig2a<-ggplot(data=fig2[fig2$Type=="Pop",],aes(x=Value,fill=Always,group=Always,alpha=.5))+
+  geom_histogram(bins=30)+scale_x_log10(labels=label_comma())+xlab("County Population")+ylab("Count of Counties")+scale_fill_brewer(palette="Set1")+theme(legend.position="bottom",axis.title.y = element_blank(),legend.title=element_blank())+ylim(0,700)+guides(alpha="none")
+
+fig2b<-ggplot(data=fig2[fig2$Type=="PctBlack",],aes(x=Value,fill=Always,group=Always,alpha=.5))+
+  geom_histogram(bins=30)+scale_x_sqrt(labels=label_percent(),limits=c(0,1))+xlab("County Percent Black")+ylab("Count of Counties")+scale_fill_brewer(palette="Set1")+guides(alpha="none",fill="none")+ylim(0,700)+theme(axis.title.y = element_blank())
+
+fig2c<-ggplot(data=fig2[fig2$Type=="PctHispanic",],aes(x=Value,fill=Always,group=Always,alpha=.5))+
+  geom_histogram(bins=30)+scale_x_sqrt(labels=label_percent(),limits=c(0,1))+xlab("County Percent Hispanic")+ylab("Count of Counties")+scale_fill_brewer(palette="Set1")+guides(alpha="none",fill="none")+ylim(0,700)+theme(axis.title.y = element_blank())
+# Extract the legend from fig2a
+legend = gtable_filter(ggplotGrob(fig2a), "guide-box") 
+
+suppressWarnings(grid.arrange(arrangeGrob(fig2b,
+                          fig2c,
+                          fig2a + theme(legend.position="none"), 
+                          nrow = 3,
+                          left = textGrob("Count of Counties", rot = 90, vjust = 1)), 
+                          legend,nrow=2,heights=c(10,1))
+ )
+
+## Code for generating descriptive numbers used in text above
+#max(fig2[fig2$Always!="Consistent"& fig2$Type=="Pop","Value"]) #max county that is inconsistent is 179684 population
+#counties10[counties10$Total==179684,] #Hall County Georgia, .02% inconsistent
+#min(fig2[fig2$Always!="Consistent"& fig2$Type=="Pop","Value"]) #min county that is inconsistent is 82 population
+#counties10[counties10$Total==82,] #Loving County, Texas, 49% inconsistent
+
+#problems<-counties10[counties10$PctDifferent %in% c("10% to 25%","25% to 50%","More than 50%"),] #182 counties
+#sum(problems$Total) #3.27 million people
+
+rm(assignedC,assignedShare,fig2,fig2a,fig2b,fig2c,legend,weights,us_states)
+```
+
+### LODES data metropolitan/micropolitan/nonmetropolitan comparison
+
+Examining the results of a delineation process conducted with the LEHD-LODES data gives us another glimpse into how the use of a different data source has the potential to change our understanding of metropolitan, micropolitan, and nonmetropolitan status. Figure 3 reveals two things about the LODES data. First, there are more consistent counties in the LODES delineation than are *always* consistent in the alternative flow data (90% in LODES compared with 86% using the alternative flow matrices). However, reflecting back on the results reported in Table 1, the alternative flow matrices are consistent about 98% of the time (because most counties are only inconsistent in a small number of alternatives). This indicates a complex structure for the uncertainty we are trying to measure and complicates any claims we might make about which data source is more reliable vis a vis the unknown 'true' designation. Second, the sankey diagram shows that the counties that were consistent or inconsistent were not the same in the LODES and the assignment through alternative flow matrices. Some of the counties that were consistent for 1,000 random draws were not consistent using LODES. This suggests that the LODES data are, at times, well outside the distribution indicated in the ACS data. Whether this is because LODES is capturing a different sample of commuters than the ACS, a function of the synthetic data, or inaccuracy in the ACS sample is unknown.
+
+```{r, Figure3 LODES county analysis, fig.width=6.5,fig.height=5}
+#| fig.cap: Consistency by metropolitan/micropolitan/nonmetropolitan status
+## Key metrics are difference with published delineation and difference with alternative flow matrice delineations. Are there more or fewer differences and are they in the same places
+
+l<-LODES_result[,c("Cnty_Res","Consistent")]
+a<-sim_result[,c("Cnty_Res","Assigned","MetroMicro")]
+comb<-merge(l,a,by="Cnty_Res")
+colnames(comb)<-c("FIPS","Lodes_Consistent","Assigned","MetroMicro")
+inconsistent<-st_drop_geometry(counties10)
+comb2<-merge(comb,inconsistent[,c("FIPS","Consistent")],by="FIPS")
+colnames(comb2)<-c("FIPS","Lodes_Consistent","Assigned","MetroMicro","Sim_Consistent")
+comb2$Lodes_Consistent<-factor(comb2$Lodes_Consistent,labels=c("Not Consistent","Consistent"))
+comb2$Sim_Consistent<-ifelse(comb2$Sim_Consistent==1,"Consistent","Not Consistent")
+comb2$Sim_Consistent<-factor(comb2$Sim_Consistent,levels=c("Not Consistent","Consistent"),labels=c("Not Consistent","Consistent"))
+## Used in text
+#length(comb2[comb2$Lodes_Consistent=="Consistent",1])/3221 #89.97% consistent in lodes
+#length(comb2[comb2$Sim_Consistent=="Consistent",1])/3221 #85.53% consistent in sim
+
+comb2$Sim_Consistent2<-paste0(comb2$MetroMicro," ",comb2$Sim_Consistent)
+comb2$Sim_Consistent<-factor(comb2$Sim_Consistent2,levels=c("Nonmetro Consistent","Nonmetro Not Consistent","Micropolitan Consistent","Micropolitan Not Consistent","Metropolitan Consistent","Metropolitan Not Consistent"),)
+comb2$Sim_Consistent2<-paste0(comb2$MetroMicro," ",comb2$Lodes_Consistent)
+comb2$Lodes_Consistent<-factor(comb2$Sim_Consistent2,levels=c("Nonmetro Consistent","Nonmetro Not Consistent","Micropolitan Consistent","Micropolitan Not Consistent","Metropolitan Consistent","Metropolitan Not Consistent"),)
+
+sank<-suppressWarnings(comb2[,c("MetroMicro","Sim_Consistent","Lodes_Consistent")]%>%make_long(MetroMicro,Sim_Consistent,Lodes_Consistent))
+sank$x<-factor(sank$x,labels=c("Official\nOMB Designation", "Alternative Flow Matrices", "LODES Result"))
+pl <- ggplot(sank, aes(x = x
+                     , next_x = next_x
+                     , node = node
+                     , next_node = next_node
+                     , fill = factor(node)
+                     , label = node)
+             )+
+geom_sankey(flow.alpha = 0.5
+                      , node.color = "black"
+                      ,show.legend = FALSE)+
+geom_sankey_label(size = 3, color = "black", fill= "white", hjust = 0.5, vjust =1.5)+
+theme_bw()+
+theme(legend.position = "none",
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),  
+      panel.grid = element_blank())+
+scale_fill_viridis_d(option = "inferno")+
+labs( fill = 'Nodes',
+      caption="Note: 'Consistent' for alternative flow matrices applies to counties\nthat were assigned the same value in all 1,000 matrices")
+pl
+rm(pl,sank,a,comb,comb2,l)
+```
+
+### RUCA assignment consistency
+
+Our analysis of RUCA codes follows roughly the same pattern as for metropolitan/micropolitan/nonmetropolitan county assignment. We first examine the rate of matching and find that almost 97% of the time alternative flow matrices produce assignments that match their assigned RUCA code (based on our replication assignment function, not the official ERS assignment, see above). Looking at tracts individually, 87% if them are always assigned to the same RUCA code (e.g. 100% consistent). However, those tracts that do end up with a different assignment cover the entire range from unmatched 1 time in 1,000 to never matching.
+
+The existence of tracts that never match their expected RUCA assignment suggests something more than simply stochastic processes and so we zoom in to a specific tract to see how this result occurs. A closer look at Tract 263200 in Litchfield County, Connecticut, which never matches its official assignment, shows a rural tract dominated by internal flows (280 out of 884) with lots of small connections to tracts within the New York City metropolitan area. These small connections have almost uniformly high MOE's (123) and so the simulation process always ends up producing a result where these small flows add up to a number that exceeds the simulated internal flow. As a result, Tract 26300 is always assigned a RUCA code 2 (Metropolitan area high commuting) as a tract dominated by flows into a large metropolitan area instead of a 10 (Rural area). While Tract 263200 is a rather extreme case, it is worth noting that 7.3% of tracts are consistent with their official designation less than 90% of the time and 2% of tracts are consistent less than half of the time.
+
+```{r, Table3 analyze RUCA sim result,fig.width=4,fig.height=3}
+#| tbl-cap: Tract RUCA designation changes over 1,000 alternative flow matrices
+#Determine degree to which RUCA codes align
+# Need Consistent, and then a code to code transition
+rsr<-RUCA_sim_result[,3:1002]
+orig<-data.frame(rep.col(RUCA_sim_result$RUCA,1000))# create a matching data.frame for easier comparison of assigned and original value
+rsr2<-apply(rsr,MARGIN = 2,FUN=function(x) x==RUCA_sim_result$RUCA) 
+a<-rowSums(rsr2)
+#length(a[a!=1000])/74002 #13% of tracts are inconsistent at least once
+
+#Consistent
+table3<-data.frame(table(rsr2))
+colnames(table3)<-c("Status","Frequency")
+tot<-sum(table3$Frequency)
+table3$Percent<-round(table3$Frequency/tot,3)
+table3$Status<-ifelse(table3$Status=="TRUE","Matched","Unmatched")
+table3%>%
+  gt() %>%
+  fmt_percent(
+    columns = c("Percent")
+  )%>%
+  fmt_number(
+    columns =c("Frequency"),
+    decimals = 0
+  )%>%
+  table_theme()->table3
+table3
+rm(table3,a,result_county_CBSA,tot)
+####Numbers included in text above
+#Consistent=rowSums(rsr2)
+#RUCA_result[Consistent==0,] #Tract 263200 in Litchfield County, Connecticut dominated by internal flow (280), but with lots and lots of connections to New York City. The flows are mostly point estimate of 4 with MOE of 123.
+#RUCA_sim_result[Consistent==0,]
+#load("./Output Data/tractsUA.Rdata")
+#litch<-tractsUA[tractsUA$Res_GISJOIN=="G0900050263200",]
+#280/sum(litch$Flow)
+
+#table_con<-data.frame(table(Consistent))
+#table_con$Consistent_Num<-as.numeric(levels(table_con$Consistent)[table_con$Consistent])
+#sum(table_con[table_con$Consistent_Num<900,"Freq"])/length(Consistent) #7.3% of tracts are consistent less than 90% of the time
+#sum(table_con[table_con$Consistent_Num<500,"Freq"])/length(Consistent) #2% of tracts are consistent less than 50% of the time
+```
+
+Examining how tracts changed assignment we observe that within the broader stability of the official delineation there is still the possibility for an alternative designation across the rural-urban continuum. Figure 4 demonstrates that rural tracts (RUCA 10) are the most likely to change assignment, but assignment changes are present in all 10 classes and inconsistent assignments move to almost every other class. While slight moves (up or down one on the RUCA continuum) dominate, 63% of the moves are more than one position on the continuum and significant numbers of tracts go up or down nine positions. While the patterns are complex, tracts that have strong commuting to a core (codes Metro High, Micro High, and Small High) tend to move to less intense/smaller core positions (up the continuum) while core and low commuting tracts tend to move to larger/more intense positions (down the continuum).
+
+```{r, Figure4 transitions for unmatched RUCA codes,fig.width=5,fig.height=8}
+#| fig-cap: Transitions in RUCA codes
+
+#generating this table takes a long time and hinders rapid revision. Building in an option to skip and just load from file
+quiet(if(full_analysis_run == TRUE | !file.exists("./Output Data/figure4.Rdata")){
+sank2<-data.frame(Official=orig[rsr2==FALSE],Alternative=rsr[rsr2==FALSE])
+sank2<-sank2[sank2$Official !=99,]
+sank4<-sank2%>%make_long(Official, Alternative)
+sank4$node<-factor(sank4$node,levels=c(1,2,3,4,5,6,7,8,9,10),
+                   labels=c("Metro Core","Metro High","Metro Low","Micro Core","Micro High","Micro Low","Small Core","Small High","Small Low","Rural"))
+sank4$next_node<-factor(sank4$next_node,levels=c(1,2,3,4,5,6,7,8,9,10),
+                   labels=c("Metro Core","Metro High","Metro Low","Micro Core","Micro High","Micro Low","Small Core","Small High","Small Low","Rural"))
+
+pl2 <- ggplot(sank4, aes(x = x
+                     , next_x = next_x
+                     , node = node
+                     , next_node = next_node
+                     , fill = factor(node)
+                     , label = node)
+             )+
+geom_sankey(flow.alpha = 0.5
+                      , node.color = "black"
+                      ,show.legend = FALSE)+
+geom_sankey_label(size = 3, color = "black", fill= "white", hjust = 0.5)+
+theme_bw()+
+theme(legend.position = "none",
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),  
+      panel.grid = element_blank())+
+scale_fill_viridis_d(option = "inferno")+
+labs( fill = 'Nodes')
+save(pl2,file="./Output Data/figure4.Rdata")
+}else(load("./Output Data/figure4.Rdata")))
+pl2+labs(caption = "for the 3.1% of tracts assignments that did not match the assigned code\n
+                    Small = Small Town, Micro = Micropolitan, Metro = Metropolitan\n
+                    High = High Commuting, Low = Low Commuting, Core= Tract in Core")
+
+#How likely to go up or down?
+#Ans: Depends on your starting designation. Centers (4,7) tend to migrate down to be 
+#commuting to a larger center, heavy commuting tracts (5,8) tend to move up tend to migrate  
+#
+#updown<-sank2 #remover 1 and 10 which can only go one way
+#updown$Difference<-updown$Official-updown$Alternative
+#updown$Movement<-"Down"
+#updown[updown$Difference < 0,"Movement"]<-"Up" # Move is to a higher number (smaller metro)
+#updown$Movement<-factor(updown$Movement)
+#result<-table(updown[,c("Official","Movement")])
+#result<-data.frame(RUCA=dimnames(result)[1],Down=result[1:10,1],Up=result[1:10,2])
+#result$Total<-result$Down+result$Up
+##result$Down<-round(result$Down/result$Total,4)
+#result$Up<-round(result$Up/result$Total,4)
+#result
+#ggplot(updown,aes(x=Difference))+geom_histogram(bins=21)
+#length(updown[abs(updown$Difference)>1,1])/length(updown[,1])
+rm(pl2)
+```
+
+### LODES data RUCA comparison
+
+Finally, we turn to the comparison of the RUCA codes based on LODES data. Figure 5 shows the transition matrix for the 8,392 (11.3%) of tracts that were not consistent between the LODES assignment and the replication assignment. Notably, all the Metro High (RUCA 1) tracts matched the replication, but 57% of the 1,502 missing tracts were designated Metro High in the replication delineation and most of the rest (32%) were zero population tracts. Aside from this trend, the transition matrix shows a relatively broad distribution of transition outcomes with a roughly normal distribution of values around the expected match. Thinking broadly about the implications of this result we cannot allocate uncertainty between the LODES and ACS data, but the mismatch of 11% clearly impacts a large number of tracts and, by extension, people impacted by an uncertain designation. The balance between over and under prediction in the transition matrix does suggest, however, that neither data source is biased either high or low relative to the other.
+
+```{r, Figure5 LODES RUCA comparison,fig.width=5,fig.height=8}
+#| fig-cap: Transitions in RUCA codes comparing LODES and RUCA replications for unmatched tracts only
+
+## Key metrics are difference with published delineation and difference with simulated delineations. Are there more or fewer differences and are they in the same places
+
+l<-LODES_RUCA_result[,c("Res_GISJOIN","RUCA","County","STATE","Pop")]
+a<-RUCA_sim_result[,c("GISJOIN","RUCA")]
+colnames(a)<-c("Res_GISJOIN","Replication_RUCA")
+comb<-merge(l,a,by="Res_GISJOIN",all.y=TRUE)
+colnames(comb)<-c("GISJOIN","Lodes_RUCA","County","State","Pop","Replication_RUCA")
+comb$Consistent<-comb$Lodes_RUCA==comb$Replication_RUCA
+comb$Consistent2<-comb$Consistent
+comb[is.na(comb$Lodes_RUCA),"Consistent2"]<-"Missing"
+#summary(comb$Consistent)
+#6890/(65610+6890) #lodes consistent 90% of the time for tracts where there is data
+comb2<-comb[comb$Consistent2 != TRUE,c("Lodes_RUCA","Replication_RUCA")]
+comb2[is.na(comb2$Lodes_RUCA),"Lodes_RUCA"]<-"Missing"
+comb2[comb2$Replication_RUCA==99,"Replication_RUCA"]<-"Zero Pop."
+#table(comb2) #generate distribution of missing and zero pop answers
+sank<-comb2%>%make_long(Lodes_RUCA, Replication_RUCA)
+sank$node<-factor(x = sank$node,levels=c(1:10,"Missing","Zero Pop."),labels=c("Metro Core","Metro High","Metro Low","Micro Core","Micro High","Micro Low","Small Core","Small High","Small Low","Rural","Missing","Zero Pop."))
+sank$next_node<-factor(x = sank$next_node,levels=c(1:10,"Missing","Zero Pop."),labels=c("Metro Core","Metro High","Metro Low","Micro Core","Micro High","Micro Low","Small Core","Small High","Small Low","Rural","Missing","Zero Pop."))
+sank$x<-factor(sank$x,levels=c("Lodes_RUCA","Replication_RUCA"),labels= c("RUCA from LODES","RUCA Replication"))
+sank$next_x<-factor(sank$next_x,levels=c("Lodes_RUCA","Replication_RUCA"),labels= c("RUCA from LODES","RUCA Replication"))
+
+pl3 <- ggplot(sank, aes(x = x
+                     , next_x = next_x
+                     , node = node
+                     , next_node = next_node
+                     , fill = factor(node)
+                     , label = node)
+             )+
+geom_sankey(flow.alpha = 0.5
+                      , node.color = "black"
+                      ,show.legend = FALSE)+
+geom_sankey_label(size = 3, color = "black", fill= "white", hjust = 0.5)+
+theme_bw()+
+theme(legend.position = "none",
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),  
+      panel.grid = element_blank())+
+scale_fill_viridis_d(option = "inferno")+
+labs(fill = 'Nodes')
+pl3
+rm(pl3,comb,comb2,a,l,sank)
+```
+
+## Discussion
+
+The analysis described above indicates that, while there is considerable uncertainty in the point estimates for commuting flows for both counties and tracts, that uncertainty does not affect the metropolitan/micropolitan/nonmetropolitan or RUCA designation for most people or most places. With any delineation there will always be edge cases that do not neatly fit into one category or the other, but both the CBSA and RUCA delineations are robust to the uncertainty in the underlying data for the vast majority of counties and tracts. About 85% of counties and 87% of tracts are always consistent within our alternative flow matrices and 90% of counties and tracts are consistent when calculating with the LODES data. More broadly, of the 77,300,223 assignments we made in our analysis 98% of counties and 97% of tracts were consistent with the official delineation.
+
+Employing an alternative data source like the LEHD LODES would change the designation for many places but it is not possible to know whether those changes increase the accuracy of the delineation or simply change the structure of the uncertainty. Notably, the delineations based on LODES data diverge from the official delineation in different ways than the alternative flow matrices. More importantly, since the alternative matrices give us a likelihood that another designation is possible, we can focus on the small number of places where this likelihood is high as opposed to the binary consistent/inconsistent produced with the LODES data.
+
+This analysis could benefit significantly from access to the underlying data that produce the public facing versions of the ACS and LODES data products. Access to the replicate weights information for the ACS would allow us to better understand how uncertainty in flows is correlated for groups of origin-destination pairs. Unfortunately, while the data to undertake this analysis is available within the Federal Statistical Research Data Centers (FSRDCs), current Census policy severely restricts the release of data for populations smaller than a Congressional District without any regard for whether the release would constitute a threat to the privacy of the data. Public LODES data are produced as a synthetic data product that introduces noise to protect individual privacy. Previous work by @fowler2016 has found the level of noise to be too high for some kinds of delineation processes to work. While, the analysis here found the distribution of LODES assignment to be unbiased with respect to the ACS, the unknown structure of the noise does suggest that an examination of the original data could be extremely useful.
+
+The nature of federal designations is that for most applications the assignment process is understood as definitive and all of the outcomes that derive from that assignment process are contingent on the result. Our work here suggests that, for some places, these assignments are not as clear cut as they may seem. This has implications for funding allocated based on these designations, for research conducted with these designations and for the outcomes that derive from funding and research. It is important to recognize that we do not have a true picture of the actual commuting patterns of the population, our data have uncertainty built into them. Even if we did have perfect data, they would only be a snapshot subject to change and even shock (as in the tremendous shift to working from home during the Covid 19 pandemic). Taken together this understanding of uncertainty indicates that we should treat these designations as at least partially contingent and should be aware of the degree to which a set of simple categories hides degrees of fit and certainty within it.
+
+The changes in working from home accelerated by the Covid 19 pandemic raise further questions about the suitability of even using commuting patterns as the basis for delineating these types of patterns. In past decades the Bureau of Labor Statistics delineated 'Economic Areas' based on the extent of newspaper subscriptions, a method with significant appeal made almost completely irrelevant in recent decades by the decline of local journalism and the changing patterns of news subscription. Perhaps it is time to retire commuting patterns for the same reason. We know that rural counties often gain metropolitan status because their local economies decline, increasing the number of long commutes into nearby metropolitan area.s It could be argued the decline of local employment should not trigger a move from nonmetropolitan to metropolitan, though such shifts are possible under current methodologies. Some alternatives have been proposed based on travel time, activity spaces, cellphone data, etc., but we are unaware of any systematic effort to compare the implications of these alternative data sources to solving the problem of delineation.
+
+Furthermore, our methods for designating places are themselves imperfect. Even if we find that a place is consistently designated in the same way, this does not definitively indicate that the designation is correct. The author's own home in State College Pennsylvania is designated as metropolitan by OMB, but starting from the center of town a person can walk three miles in any direction and be standing in farmland. This is clearly not consistent with what most people would understand as metropolitan yet peculiarities of settlement, county size, and the powerful commuting draw of Penn State University all combine to pull the designation into the metropolitan column. Part of what the analysis conducted here points to is that we need to carefully examine the assumptions that underlie federal designations. Measuring uncertainty is only the first step in how we should interrogate our designations. A key second step is to carefully examine the methodology to identify hidden assumptions or assumptions that are themselves subject to difference of opinion. Reproducing the official delineations allows us to highlight the thresholds for population size, commuting share, land area overlap and other variables that shape the delineations we ultimately observe. Future work will need to systematically examine the implications of adjusting these variables.
+
+The replication scripts that accompany this paper provide the opportunity to adjust these thresholds as parameters to see how important they are to the final designations. In anticipation of the release of 2020 decennial census data OMB and other federal agencies opened up discussions of how these methodologies might be revised [@officeofmanagementandbudget2021]. The largest proposed adjustment (ultimately rejected) was an increase in the population threshold used to qualify an urban area as metropolitan from 50,000 people to 100,000 people. This change would have significantly reshaped the landscape of what is defined as metropolitan. At the very least the scripts provided here can help generate alternative delineations based on proposed changes to thresholds or allow researchers to back calculate designations based on future changes to delineation methods.
+
+Overall we find the designations for CBSAs and RUCA codes to be relatively robust to the uncertainty that accompanies the commuting data on which they are based. While we think that incorporating uncertainty improves the usefulness of these designations we were, frankly, surprised at how little they changed given the relatively high levels of uncertainty associated with the small sample. Our work here gives us more confidence in the usability of these designations going forward even if we will continue to test assumptions and consider alternative ways of defining urban and rural places.
+
+## References
